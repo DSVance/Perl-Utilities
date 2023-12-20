@@ -138,6 +138,7 @@ sub Main
    {
       'Debug'        => FALSE,
       'LoadList'     => FALSE,
+      'RawData'      => FALSE,
       'ListFileName' => "StockSymbolList.txt",
       'KeyFileName'  => "IEXApiKey.txt"
    };
@@ -176,9 +177,13 @@ sub Main
       print ( "$ProgramName DEBUG: GET request status = $Status \n" ) if ( $Debug );
       if ( $Status != 200 )
       {
-         print ( "$ProgramName ERROR: The quote service request returned unsuccessful status code $Status. \n" );
+         print ( "$ProgramName ERROR: The quote service request returned unsuccessful status code $Status \n" );
          print ( "$ProgramName: Service response - " . $Client->responseContent() . "\n" );
-         print ( "$ProgramName: See key file $Directory$OptionsRef->{'KeyFileName'} to ensure your service access key is valid. \n" );
+         if ( $Status >= 400 && $Status < 500 )
+         {
+            # Client side error
+            print ( "$ProgramName: See key file $Directory$OptionsRef->{'KeyFileName'} to ensure your service access key is valid \n" );
+         }
       }
 
       else
@@ -227,6 +232,12 @@ sub Main
                   defined ( ${$HashRef}{'latestPrice'} ) ? ${$HashRef}{'latestPrice'} : 0,
                   defined ( ${$HashRef}{'companyName'} ) ? ${$HashRef}{'companyName'} : " "
                   ;
+
+            if ( $OptionsRef->{'RawData'} == TRUE )
+            {
+               print ( "Raw data for ${$HashRef}{'symbol'}: \n" );
+               print ( Dumper ( $HashRef ) . "\n" );
+            }
          }
       }
    }
@@ -259,18 +270,23 @@ sub ProcessCmdLine
    $Usage ="PURPOSE: Retrieve a price quote for one or more specified stock symbols.        \n" .
            "\n" .
            "USAGE:   $0 <switches>                                                          \n" .
-           "\n" .  
+           "\n" .
            "             -d[ebug]   Enabled debug mode.                                     \n" .
-           "\n" .  
+           "\n" .
            "             -h[elp]    Displays help & usage text.                             \n" .
-           "\n" .  
+           "\n" .
            "             -l[ist]    Report on stock symbols listed one per line in a file.  \n" .
            "                        The default file name is $OptionsRef->{'ListFileName'}  \n" .
            "                        See the -f[ile] switch to specify a list file name.     \n" .
-           "\n" .  
+           "\n" .
            "             -f[ile]    Name of the file to load a list of stock symbols from.  \n" .
            "                        Automatically implies use of the -list switch.          \n" .
-           "\n" .  
+           "\n" .
+           "             -r[aw]     Dispaly the raw data from the query response.  This is  \n" .
+           "                        only valid when directly specifying a single stock      \n" .
+           "                        symbol on the command line and has no effect when used  \n" .
+           "                        in combination with the -list and/or -file options.     \n" .
+           "\n" .
            "             AAAA       A single stock symbol to report on.  A symbol is 1 to 4 \n" .
            "                        A-Z characters (case insensitive). Multiple individual  \n" .
            "                        symbols may be specified on a single command line.      \n" .
@@ -284,7 +300,7 @@ sub ProcessCmdLine
       # Check for the HELP switch.  Display usage if found.
       if ( $ARGV[$ArgCount] =~ m/^(-|\/)(\?|h|help)$/i )
       {
-         print ( STDOUT "\n$Usage" );
+         print ( "\n$Usage" );
          exit;
       }
    }
@@ -298,7 +314,7 @@ sub ProcessCmdLine
          $OptionsRef->{ 'Debug' } = TRUE;
 
          # Warn user that Debug is enabled
-         print ( STDOUT "$ProgramName WARNING: Debug mode is enabled! \n" );
+         print ( "$ProgramName: Debug mode is enabled \n" );
 
          # Remove the debug flag from argument array and reset
          # the argument count to reflect the deletion
@@ -311,7 +327,7 @@ sub ProcessCmdLine
    # Ensure that there are more arguments
    unless ( $ArgCount > 0 )
    {
-         print ( STDOUT "\n$Usage" );
+         print ( "\n$Usage" );
          exit;
    }
 
@@ -331,7 +347,7 @@ sub ProcessCmdLine
       {
          unless ( defined ( $ARGV[$ArgCount + 1] ) )
          {
-             print ( "$ProgramName ERROR: No value found after $ARGV[$ArgCount] switch. \n" );
+             print ( "$ProgramName ERROR: No value found after $ARGV[$ArgCount] switch \n" );
              $OptionsRef->{'ListFileName'} = "";
          }
 
@@ -344,10 +360,17 @@ sub ProcessCmdLine
          }
       }
 
+      # --- Check for the RAW switch ---
+      elsif ( $Arg =~ m/^(-|\/)(r|raw)$/i )
+      {
+         $OptionsRef->{'RawData'} = TRUE;
+         print ( "$ProgramName: Raw data mode is enabled \n" );
+      }
+
       # --- Check for unrecognized switches ---
       elsif ( $Arg =~ m/^\-/i )
       {
-         print ( "$ProgramName ERROR: Unrecognized switch \"$Arg\". \n" );
+         print ( "$ProgramName ERROR: Unrecognized switch \"$Arg\" \n" );
       }
 
       # --- Check for stock symbols ---
@@ -363,6 +386,13 @@ sub ProcessCmdLine
       {
          print ( "$ProgramName ERROR: Unrecognized argument \"$Arg\". \n" );
       }
+   }
+
+   if (  $OptionsRef->{'LoadList'} == TRUE )
+   {
+      $OptionsRef->{'RawData'} = FALSE;
+      print ( "$ProgramName WARNING: Raw data mode was overridden by other options \n" );
+
    }
 }
 
@@ -394,7 +424,7 @@ sub LoadSymbols
 
    unless ( open ( INFILE, "<$InputFileName" ) )
    {
-      print ( STDERR "$ProgramName ERROR: Unable to open symbol list file $InputFileName \n");
+      print ( "$ProgramName ERROR: Unable to open symbol list file $InputFileName \n");
    }
 
    else
